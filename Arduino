@@ -1,0 +1,144 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ArduinoJson.h>
+#include <ESP8266HTTPClient.h>
+
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64 
+#define WIFI_SSID "INACOS"
+#define WIFI_PASSWORD "PicktoLightGacor33"
+#define TOKEN "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJsb3ZzdWUiLCJyb2xlIjoiT1BFUkFUT1IiLCJpYXQiOjE2OTE1ODc2MjMsImV4cCI6MTY5MTU5NTYyM30.3VYgXeTfDs5ExLLdh9opO7WSA30bsUeLYIARWLY-KCY"
+#define OLED_RESET D0
+#define URL "http://IP_ADRESS:8000/user/operator/accept?orderId=5"
+
+// Adafruit_SSD1306 oled(OLED_RESET);
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+const int ledPin = D3;
+const int buttonPin = D7;
+int buttonState = 0;
+int lastButtonState = 0;
+bool reset = false;
+const char* name;
+int cnt = 0;
+
+void setup() {
+  Serial.begin(115200);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    while (true);
+  }
+
+  pinMode(buttonPin, INPUT);
+
+  delay(2000);         
+  oled.clearDisplay(); 
+
+  oled.setTextSize(3);          
+  oled.setTextColor(WHITE);     
+  oled.setCursor(0, 0);      
+  oled.println("Hello World!"); 
+  oled.display();  
+  delay(2000);
+}
+
+void plz() {
+  oled.clearDisplay();
+  oled.setTextSize(2.5);
+  oled.setTextColor(WHITE);
+  oled.setCursor(0, 0);
+  oled.println("Diode");
+  oled.setTextSize(3);
+  oled.print(cnt);
+  oled.display();
+
+  Serial.println(cnt);
+  if (cnt > 0) {
+    digitalWrite(ledPin, HIGH);
+  } else {
+    digitalWrite(ledPin, LOW);
+  }
+}
+
+void loop() {
+  Serial.println("Order");
+
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClient wifiClient;
+    HTTPClient httpClient;
+
+    httpClient.begin(wifiClient, URL);
+
+    // Set headers
+    httpClient.addHeader("Content-Type", "application/json");
+    httpClient.setAuthorization("Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJsb3ZzdWUiLCJyb2xlIjoiT1BFUkFUT1IiLCJpYXQiOjE2OTE1ODc2MjMsImV4cCI6MTY5MTU5NTYyM30.3VYgXeTfDs5ExLLdh9opO7WSA30bsUeLYIARWLY-KCY");
+
+    int httpResponseCode = httpClient.GET();
+
+    if (httpResponseCode > 0) {
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+
+      String response = httpClient.getString();
+      char c [50];
+      strcpy_P(c, response.c_str());
+      Serial.println(c);
+      StaticJsonDocument<200> jsonDoc;
+      DeserializationError error = deserializeJson(jsonDoc, c);
+
+      if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return;
+      }
+      
+      JsonArray jsonArray = jsonDoc.as<JsonArray>();
+
+      for (JsonObject obj : jsonArray) {
+        name = obj["orderProductName"];
+        Serial.println(name);
+        cnt = obj["orderCount"];
+        Serial.println(cnt);
+
+        if (strcmp(name, "product5") == 0) {
+          plz();
+          break;
+        }
+      }
+    } else {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
+    }
+    buttonState = digitalRead(buttonPin);
+
+  if (buttonState != lastButtonState) {
+    lastButtonState = buttonState;
+
+    if (buttonState == LOW) {
+      oled.clearDisplay();
+      oled.setTextSize(2.5);
+      oled.setTextColor(WHITE);
+      oled.setCursor(0, 0);
+      oled.println("Inductor");
+      oled.setTextSize(3);
+      oled.println("0");
+      oled.display();
+      digitalWrite(ledPin, HIGH);
+      break;
+    } else {
+      digitalWrite(ledPin, LOW);
+    }
+  }
+    httpClient.end();
+    delay(3000);
+  }
+}
